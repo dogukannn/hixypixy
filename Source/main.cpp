@@ -54,7 +54,7 @@ bool InitializeWindow(int width, int height)
     }
 
     // Create window
-    GWindow = SDL_CreateWindow("DirectX12 Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_SHOWN);
+    GWindow = SDL_CreateWindow("hixypixy", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_SHOWN);
     if (GWindow == nullptr)
     {
         std::cout << "Failed to create SDL window" << std::endl;
@@ -64,6 +64,18 @@ bool InitializeWindow(int width, int height)
     SDL_VERSION(&wmInfo.version);
     SDL_GetWindowWMInfo(GWindow, &wmInfo);
     GWindowHandle = wmInfo.info.win.window;
+
+    SDL_Surface* icon = SDL_LoadBMP("../hixypixy_icon.bmp");
+    if (icon != nullptr)
+    {
+	    /* Get the colourkey, which will be magenta */
+	    uint32_t rgbmap = SDL_MapRGB(icon->format, 255, 0, 255);
+
+	    SDL_SetColorKey(icon, SDL_TRUE, rgbmap);
+	    SDL_SetWindowIcon(GWindow, icon);
+	    SDL_FreeSurface(icon);
+        std::cout << SDL_GetError() << std::endl;
+    }
 
     //SDL_SetWindowGrab(GWindow, SDL_TRUE);
 	return true;
@@ -525,7 +537,6 @@ int main(int argc, char* argv[])
     SDL_Event event;
     bool quit = false;
 
-        std::cerr << "Fail in shader compilation!" << std::endl;
     while (!quit)
     {
         while (SDL_PollEvent(&event))
