@@ -3,7 +3,7 @@
 
 shadertoy like pixel shader viewer for hlsl
 
-press "r" to reload shaders
+Shaders will recompile when a change is detected, if you want to reload manually press "r".
 
 ## TODO
 - [x] ~~Auto reload shader when the file is changed~~
