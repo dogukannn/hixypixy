@@ -1,6 +1,13 @@
 cbuffer cb : register(b0)
 {
-    float iTime : packoffset(c0);
+    //: packoffset(c0);
+    float3 iResolution;
+    float iTime;
+    float iTimeDelta;
+    float iFrameRate;
+    int iFrame;
+    float4 iMouse;
+    float4 iDate;   
 };
 
 struct VertexInput
@@ -10,12 +17,12 @@ struct VertexInput
 
 struct VertexOutput
 {
-    float4 position : SV_Position;
+    float4 fragCoord : SV_Position;
 };
 
 VertexOutput main(VertexInput vertexInput)
 {
     VertexOutput output;
-    output.position = float4(vertexInput.inPos, 1.0f);
+    output.fragCoord = float4(vertexInput.inPos, 1.0f);
     return output;
 }

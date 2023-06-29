@@ -8,7 +8,9 @@
 #include <fstream>
 #include <vector>
 #include <atlbase.h>
+#include <chrono>
 #include <dxcapi.h>
+#include <filesystem>
 
 #include "ShaderCompiler.h"
 
@@ -51,8 +53,6 @@ bool InitializeWindow(int width, int height)
         return false;
     }
 
-	//SDL_SetRelativeMouseMode(SDL_TRUE);
-
     // Create window
     GWindow = SDL_CreateWindow("DirectX12 Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_SHOWN);
     if (GWindow == nullptr)
@@ -90,11 +90,59 @@ inline std::vector<char> readFile(const std::string& filename)
     return buffer;
 };
 
+struct Uniforms
+{
+    float iResolution[3];
+    float iTime;
+    float iTimeDelta;
+    float iFrameRate;
+    int iFrame;
+    float iMouse[4];
+    float iDate[4];
+};
+
+int windowWidth = 800;
+int windowHeight  = 600;
+
+std::chrono::time_point<std::chrono::system_clock> startTime;
+std::chrono::time_point<std::chrono::system_clock> lastTime;
+int frameCount = 0;
+
+void UpdateUniforms(Uniforms& cbVS)
+{
+    cbVS.iResolution[0] = windowWidth;
+    cbVS.iResolution[1] = windowHeight;
+    cbVS.iResolution[2] = 1.0f; // pixel aspect ratio
+
+	auto now = std::chrono::system_clock::now();
+    std::chrono::duration<float, std::ratio<1,1>> diff = now - startTime;
+    cbVS.iTime = diff.count();
+;
+    std::chrono::duration<float, std::ratio<1,1>> delta = now - lastTime;
+    cbVS.iTimeDelta = delta.count();
+    cbVS.iFrameRate = 1.0f / cbVS.iTimeDelta;
+    cbVS.iFrame = frameCount++;
+    lastTime = now;
+
+}
+
+
 
 int main(int argc, char* argv[])
 {
-    const int windowWidth = 800;
-    const int windowHeight  = 600;
+	auto now = std::chrono::system_clock::now();
+	startTime = now;
+    lastTime = startTime;
+	
+    char* givenShaderName;
+	LPCWSTR shaderFilePath = L"../Shaders/triangle.px.hlsl";
+    if (argc > 1)
+    {
+        givenShaderName = argv[1];
+		wchar_t* wtext = new wchar_t[strlen(givenShaderName) + 1];
+		mbstowcs(wtext, givenShaderName, strlen(givenShaderName) + 1);
+        shaderFilePath = wtext;
+    }
 
     if (!InitializeWindow(windowWidth, windowHeight))
     {
@@ -318,12 +366,8 @@ int main(int argc, char* argv[])
     vertexBufferView.StrideInBytes = sizeof(float) * 3;
     vertexBufferView.SizeInBytes = vertexBufferSize;
 
-	struct
-	{
-        float iTime;
-	} cbVS;
-
-    cbVS.iTime = 2.0f;
+	Uniforms cbVS;
+    UpdateUniforms(cbVS);
 
 	ID3D12Resource* constantBuffer;
 	UINT8* mappedConstantBuffer;
@@ -386,8 +430,14 @@ int main(int argc, char* argv[])
     ShaderCompiler compiler;
 
     CComPtr<ID3DBlob> vsShader, pxShader;
-    compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader);
-    compiler.CompilePixelShader(L"../Shaders/triangle.px.hlsl", pxShader);
+    bool v = compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader);
+    bool p = compiler.CompilePixelShader(shaderFilePath, pxShader);
+    if(!v || !p)
+    {
+        return 2;
+    }
+
+    auto pixelShaderLastWriteTime = std::filesystem::last_write_time(shaderFilePath);
 
 	////////////////////////////////////
 	
@@ -475,6 +525,7 @@ int main(int argc, char* argv[])
     SDL_Event event;
     bool quit = false;
 
+        std::cerr << "Fail in shader compilation!" << std::endl;
     while (!quit)
     {
         while (SDL_PollEvent(&event))
@@ -490,8 +541,11 @@ int main(int argc, char* argv[])
 	            case SDLK_r:
                     vsShader = NULL;
                     pxShader = NULL;
-		            compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader);
-		            compiler.CompilePixelShader(L"../Shaders/triangle.px.hlsl", pxShader);
+		            if (!compiler.CompilePixelShader(shaderFilePath, pxShader) || 
+                        !compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader))
+		            {
+                        break;
+		            }
 
                     vsBytecode.BytecodeLength = vsShader->GetBufferSize();
                     vsBytecode.pShaderBytecode = vsShader->GetBufferPointer();
@@ -518,8 +572,38 @@ int main(int argc, char* argv[])
 
             }
 		}
-        
-		//memcpy(mappedConstantBuffer, &cbVS, sizeof(cbVS));
+
+		auto currentPixelShaderLastWriteTime = std::filesystem::last_write_time(shaderFilePath);
+        if(currentPixelShaderLastWriteTime != pixelShaderLastWriteTime)
+        {
+	        vsShader = NULL;
+	        pxShader = NULL;
+	        if (compiler.CompilePixelShader(shaderFilePath, pxShader) &&
+		        compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader))
+	        {
+				vsBytecode.BytecodeLength = vsShader->GetBufferSize();
+				vsBytecode.pShaderBytecode = vsShader->GetBufferPointer();
+				psBytecode.BytecodeLength = pxShader->GetBufferSize();
+				psBytecode.pShaderBytecode = pxShader->GetBufferPointer();
+
+				psoDesc.VS = vsBytecode;
+				psoDesc.PS = psBytecode;
+
+				try
+				{
+					ThrowIfFailed(device->CreateGraphicsPipelineState(
+						&psoDesc, IID_PPV_ARGS(&pipelineState)));
+				}
+				catch (com_exception e)
+				{
+					std::cout << "Failed to create Graphics Pipeline! " << e.what();
+				}
+	        }
+        }
+
+
+        UpdateUniforms(cbVS);
+		memcpy(mappedConstantBuffer, &cbVS, sizeof(cbVS));
 
 		ThrowIfFailed(commandAllocator->Reset());
 
