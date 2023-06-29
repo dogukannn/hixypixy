@@ -7,5 +7,6 @@ Shaders will recompile when a change is detected, if you want to reload manually
 
 ## TODO
 - [x] ~~Auto reload shader when the file is changed~~
-- [ ] All uniform variables like time and resolution
+- [x] All uniform variables like time and resolution
 - [ ] Show FPS
+- [ ] Multiple shader support
