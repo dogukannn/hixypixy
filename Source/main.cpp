@@ -102,15 +102,16 @@ inline std::vector<char> readFile(const std::string& filename)
     return buffer;
 };
 
-struct Uniforms
+  
+struct alignas(16) Uniforms
 {
     float iResolution[3];
     float iTime;
-    float iTimeDelta;
-    float iFrameRate;
-    int iFrame;
     float iMouse[4];
     float iDate[4];
+    float iTimeDelta;
+    float iFrameRate;
+    float iFrame;
 };
 
 int windowWidth = 800;
@@ -119,6 +120,8 @@ int windowHeight  = 600;
 std::chrono::time_point<std::chrono::system_clock> startTime;
 std::chrono::time_point<std::chrono::system_clock> lastTime;
 int frameCount = 0;
+
+typedef std::chrono::milliseconds ms;
 
 void UpdateUniforms(Uniforms& cbVS)
 {
@@ -136,6 +139,16 @@ void UpdateUniforms(Uniforms& cbVS)
     cbVS.iFrame = frameCount++;
     lastTime = now;
 
+
+    time_t tt = std::chrono::system_clock::to_time_t(now);
+    tm local_tm = *localtime(&tt);
+    cbVS.iDate[0] = local_tm.tm_year;
+    cbVS.iDate[1] = local_tm.tm_mon;
+    cbVS.iDate[2] = local_tm.tm_mday;
+
+	time_t timeSinceEpoch = mktime(&local_tm);
+	ms msSinceEpoch = std::chrono::duration_cast<ms>(std::chrono::current_zone()->to_local(now).time_since_epoch());
+    cbVS.iDate[3] = msSinceEpoch.count() / 1000.0f;
 }
 
 
@@ -536,6 +549,9 @@ int main(int argc, char* argv[])
 	frameIndex = swapchain->GetCurrentBackBufferIndex();
     SDL_Event event;
     bool quit = false;
+    float mouseEvent[4] = {0.f, 0.f, -1.f, -1.f};
+    bool click = false;
+    bool hold = false;
 
     while (!quit)
     {
@@ -580,9 +596,35 @@ int main(int argc, char* argv[])
             }
             if(event.type == SDL_MOUSEBUTTONDOWN)
             {
-
+                int x, y;
+				SDL_GetMouseState(&x, &y);
+				click = true;
+				mouseEvent[2] = x;
+				mouseEvent[3] = y;
             }
+            if (event.type == SDL_MOUSEBUTTONUP)
+            {
+                hold = false;
+				mouseEvent[2] = -abs(mouseEvent[2]);
+				mouseEvent[3] = -abs(mouseEvent[3]);
+            }
+
+            int x, y;
+            SDL_GetMouseState(&x, &y);
+            mouseEvent[0] = x;
+            mouseEvent[1] = y;
 		}
+		if(hold)
+		{
+			mouseEvent[2] = abs(mouseEvent[2]);
+			mouseEvent[3] = -abs(mouseEvent[3]);
+		}
+		if(click)
+		{
+            hold = true;
+            click = false;
+		}
+        
 
 		auto currentPixelShaderLastWriteTime = std::filesystem::last_write_time(shaderFilePath);
         if(currentPixelShaderLastWriteTime != pixelShaderLastWriteTime)
@@ -614,6 +656,10 @@ int main(int argc, char* argv[])
 
 
         UpdateUniforms(cbVS);
+        cbVS.iMouse[0] = mouseEvent[0];
+        cbVS.iMouse[1] = mouseEvent[1];
+        cbVS.iMouse[2] = mouseEvent[2];
+        cbVS.iMouse[3] = mouseEvent[3];
 		memcpy(mappedConstantBuffer, &cbVS, sizeof(cbVS));
 
 		ThrowIfFailed(commandAllocator->Reset());
