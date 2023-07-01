@@ -5,8 +5,11 @@ shadertoy like pixel shader viewer for hlsl
 
 Shaders will recompile when a change is detected, if you want to reload manually press "r".
 
+![hixypixy_PsAEbrrySc](https://github.com/dogukannn/hixypixy/assets/35217389/bb64e59f-5c8c-4074-a9e3-b5f53b5af2fe)
+
+
 ## TODO
 - [x] ~~Auto reload shader when the file is changed~~
 - [x] ~~All uniform variables like time and resolution~~
-- [ ] Show FPS
+- [x] Show FPS
 - [ ] Multiple shader support
