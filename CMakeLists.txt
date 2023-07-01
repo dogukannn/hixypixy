@@ -28,6 +28,12 @@ set(SDL_STATIC ON  CACHE BOOL "" FORCE)
 set(SDL_STATIC_PIC ON CACHE BOOL "" FORCE)
 add_subdirectory(${EXTERNAL_DIR}/SDL)
 
+add_subdirectory(${EXTERNAL_DIR}/freetype)
+
+add_subdirectory(${EXTERNAL_DIR}/glm)
+
+add_subdirectory(${EXTERNAL_DIR}/DirectX-Headers)
+
 set(CMAKE_CXX_STANDARD 20)
 
 file(GLOB_RECURSE SOURCES
@@ -37,4 +43,4 @@ file(GLOB_RECURSE SOURCES
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL2-static d3d12 dxgi dxguid dxcompiler)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL2-static d3d12 dxgi dxguid dxcompiler freetype glm::glm DirectX-Headers)

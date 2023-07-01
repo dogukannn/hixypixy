@@ -3,7 +3,7 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_syswm.h>
-#include <d3d12.h>
+#include "directx/d3dx12.h"
 #include <dxgi1_6.h>
 #include <fstream>
 #include <vector>
@@ -12,7 +12,8 @@
 #include <dxcapi.h>
 #include <filesystem>
 
-#include "ShaderCompiler.h"
+#include "FontRenderer.h"
+//#include "ShaderCompiler.h"
 
 SDL_Window* GWindow = nullptr;
 HWND GWindowHandle = nullptr;
@@ -210,6 +211,16 @@ int main(int argc, char* argv[])
     std::cout << "Vendor ID: " << desc.VendorId << std::endl;
     std::cout << "Device ID: " << desc.DeviceId << std::endl;
     std::cout << "Dedicated Video Memory: " << desc.DedicatedVideoMemory << std::endl;
+
+	//init font renderer
+    FontRenderer fontRenderer;
+    if(!fontRenderer.Initialize(device))
+    {
+        std::cout << "Failed to initialize font renderer!" << std::endl;
+        return -1;
+    }
+
+
 
     // Create the command queue
     ID3D12CommandQueue* commandQueue;
@@ -629,6 +640,7 @@ int main(int argc, char* argv[])
 		auto currentPixelShaderLastWriteTime = std::filesystem::last_write_time(shaderFilePath);
         if(currentPixelShaderLastWriteTime != pixelShaderLastWriteTime)
         {
+            pixelShaderLastWriteTime = currentPixelShaderLastWriteTime;
 	        vsShader = NULL;
 	        pxShader = NULL;
 	        if (compiler.CompilePixelShader(shaderFilePath, pxShader) &&
@@ -698,6 +710,8 @@ int main(int argc, char* argv[])
 		commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 		//commandList->IASetIndexBuffer(&indexBufferView);
         commandList->DrawInstanced(3, 1, 0, 0);
+
+        fontRenderer.RenderText(commandList, "OMG", {400,300});
 
 		D3D12_RESOURCE_BARRIER presentBarrier;
 		presentBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;

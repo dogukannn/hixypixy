@@ -1,5 +1,4 @@
 #include "ShaderCompiler.h"
-#include <dxcapi.h>
 
 ShaderCompiler::ShaderCompiler()
 {
