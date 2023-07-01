@@ -21,7 +21,7 @@ struct PixelOutput
     float4 color : SV_Target0;
 };
 
-Texture2D g_texture : register(t1);
+Texture2D g_texture : register(t0);
 SamplerState s1 : register(s0);
 
 PixelOutput main(PixelInput pixelInput)

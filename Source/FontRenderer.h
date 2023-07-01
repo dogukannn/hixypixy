@@ -20,7 +20,7 @@ class FontRenderer
 public:
 	FontRenderer();
 
-	bool Initialize(ID3D12Device* device);
+	bool Initialize(ID3D12Device* device, glm::ivec2 windowSize);
 	void RenderText(::ID3D12GraphicsCommandList* commandList, ::std::string text, glm::ivec2 startCanvasPos);
 
 	ID3D12Device* Device;
@@ -35,9 +35,12 @@ public:
 	UINT constantBuffersSize;
 	UINT8* mappedConstantBuffer;
 
-	ID3D12DescriptorHeap* mainDescriptorHeap;
+	ID3D12DescriptorHeap* shaderDescriptorHeap;
+	ID3D12DescriptorHeap* charDescriptorHeap;
 
 	ID3D12PipelineState* pipelineState;
+
+	glm::ivec2 WindowSize;
 
 	std::map<char, Character> Characters;
 };

@@ -1,6 +1,8 @@
 #include "FontRenderer.h"
 #include "FontRenderer.h"
 #include "FontRenderer.h"
+#include "FontRenderer.h"
+#include "FontRenderer.h"
 
 #include <fstream>
 #include <iostream>
@@ -21,8 +23,9 @@ FontRenderer::FontRenderer()
 
 }
 
-bool FontRenderer::Initialize(ID3D12Device* device)
+bool FontRenderer::Initialize(::ID3D12Device* device, glm::ivec2 windowSize)
 {
+	WindowSize = windowSize;
 	Device = device;
 
 	FT_Library ft;
@@ -39,7 +42,7 @@ bool FontRenderer::Initialize(ID3D12Device* device)
 		return false;
 	}
 
-	UINT fontSize = 48;
+	UINT fontSize = 25;
 	FT_Set_Pixel_Sizes(face, 0, fontSize);
 
 	assert(FT_IS_SCALABLE(face));
@@ -86,7 +89,7 @@ bool FontRenderer::Initialize(ID3D12Device* device)
 			}
 		}
 		Character character = {};
-		character.Projection = glm::ortho(0.0, 800.0, 0.0, 600.0);
+		character.Projection = glm::ortho(0.0f, static_cast<float>(windowSize.x), 0.0f, static_cast<float>(windowSize.y));
 		character.AtlasPos = glm::ivec2(x, y);
 		character.AtlasResolution = glm::ivec2(imageWidth, imageHeight);
 		character.Size = glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
@@ -178,7 +181,7 @@ bool FontRenderer::Initialize(ID3D12Device* device)
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
 			IID_PPV_ARGS(&textureBufferUploadHeap)));
-    textureBuffer->SetName(L"Font Texture Buffer Upload Resource Heap");
+    textureBufferUploadHeap->SetName(L"Font Texture Buffer Upload Resource Heap");
 
 
     ID3D12CommandQueue* commandQueue;
@@ -186,6 +189,7 @@ bool FontRenderer::Initialize(ID3D12Device* device)
     queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     ThrowIfFailed(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue)));
+	commandQueue->SetName(L"Upload command queue");
 
     ID3D12CommandAllocator* commandAllocator;
     ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
@@ -208,32 +212,58 @@ bool FontRenderer::Initialize(ID3D12Device* device)
     ID3D12CommandList* ppCommandLists[] = {uploadCommandList};
     commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
+	HANDLE fenceEvent;
+	ID3D12Fence* fence;
+	UINT64 fenceValue = 1;
 
-	D3D12_DESCRIPTOR_RANGE1 ranges[2];
-    ranges[0].BaseShaderRegister = 0;
-    ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-    ranges[0].NumDescriptors = 1;
-    ranges[0].RegisterSpace = 0;
-    ranges[0].OffsetInDescriptorsFromTableStart = 0;
-    ranges[0].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+	ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+	if (fenceEvent == nullptr)
+	{
+		ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+	}
 
-    ranges[1].BaseShaderRegister = 1;
-    ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    ranges[1].NumDescriptors = 1;
-    ranges[1].RegisterSpace = 0;
-    ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-    ranges[1].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+	ThrowIfFailed(commandQueue->Signal(fence, fenceValue++));
 
-    D3D12_ROOT_PARAMETER1 rootParameters[1];
+	// Wait until the previous frame is finished.
+	if (fence->GetCompletedValue() < fenceValue - 1)
+	{
+		ThrowIfFailed(fence->SetEventOnCompletion(fenceValue - 1, fenceEvent));
+		WaitForSingleObject(fenceEvent, INFINITE);
+	}
+
+
+	D3D12_DESCRIPTOR_RANGE1 range1[1];
+    range1[0].BaseShaderRegister = 0;
+    range1[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+    range1[0].NumDescriptors = 1;
+    range1[0].RegisterSpace = 0;
+    range1[0].OffsetInDescriptorsFromTableStart = 0;
+    range1[0].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+
+	D3D12_DESCRIPTOR_RANGE1 range2[1];
+    range2[0].BaseShaderRegister = 0;
+    range2[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    range2[0].NumDescriptors = 1;
+    range2[0].RegisterSpace = 0;
+    range2[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    range2[0].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+
+    D3D12_ROOT_PARAMETER1 rootParameters[2];
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 2;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = ranges;
+    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[0].DescriptorTable.pDescriptorRanges = range1;
+
+    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[1].DescriptorTable.pDescriptorRanges = range2;
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
     rootSignatureDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
     rootSignatureDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-    rootSignatureDesc.Desc_1_1.NumParameters = 1;
+    rootSignatureDesc.Desc_1_1.NumParameters = 2;
     rootSignatureDesc.Desc_1_1.pParameters = rootParameters;
     rootSignatureDesc.Desc_1_1.NumStaticSamplers = 1;
     rootSignatureDesc.Desc_1_1.pStaticSamplers = &sampler;
@@ -312,13 +342,21 @@ bool FontRenderer::Initialize(ID3D12Device* device)
     vertexBufferView.StrideInBytes = sizeof(float) * 3;
     vertexBufferView.SizeInBytes = vertexBufferSize;
 	
-	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
-	descHeapDesc.NumDescriptors = 256;
-	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	ThrowIfFailed(device->CreateDescriptorHeap(&descHeapDesc,
-											   IID_PPV_ARGS(&mainDescriptorHeap)));
-	mainDescriptorHeap->SetName(L"Descriptor Heap For CBV + SRV");
+	D3D12_DESCRIPTOR_HEAP_DESC shaderDescHeapDesc = {};
+	shaderDescHeapDesc.NumDescriptors = 1;
+	shaderDescHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	shaderDescHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	ThrowIfFailed(device->CreateDescriptorHeap(&shaderDescHeapDesc,
+											   IID_PPV_ARGS(&shaderDescriptorHeap)));
+	shaderDescriptorHeap->SetName(L"Descriptor Heap For SRV (font bitmap atlas)");
+
+	D3D12_DESCRIPTOR_HEAP_DESC charDescHeapDesc = {};
+	charDescHeapDesc.NumDescriptors = 256;
+	charDescHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	charDescHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	ThrowIfFailed(device->CreateDescriptorHeap(&charDescHeapDesc,
+											   IID_PPV_ARGS(&charDescriptorHeap)));
+	charDescriptorHeap->SetName(L"Descriptor Heap For CBV (character properties)");
 
 
 	D3D12_HEAP_PROPERTIES cbHeapProperties;
@@ -351,12 +389,12 @@ bool FontRenderer::Initialize(ID3D12Device* device)
 			D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&constantBuffers[i])));
 	}
 
-	int defaultChar = static_cast<int>('c');
+	int defaultChar = static_cast<int>('!');
 	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 	cbvDesc.BufferLocation = constantBuffers[defaultChar]->GetGPUVirtualAddress();
 	cbvDesc.SizeInBytes = (sizeof(Character) + 255) & ~255; // CB size is required to be 256-byte aligned.
 
-	D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(mainDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(charDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 	cbvHandle.ptr = cbvHandle.ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 0;
 
 	device->CreateConstantBufferView(&cbvDesc, cbvHandle);
@@ -366,8 +404,6 @@ bool FontRenderer::Initialize(ID3D12Device* device)
 	CBReadRange.End = 0;
 
 	Character charac = Characters[defaultChar];
-	charac.CanvasPos = glm::ivec2(400, 300);
-	//charac.Projection = glm::ortho(0.0, 800.0, 0.0, 600.0);
 
 	ThrowIfFailed(constantBuffers[defaultChar]->Map(
 		0, &CBReadRange, reinterpret_cast<void**>(&mappedConstantBuffer)));
@@ -380,11 +416,10 @@ bool FontRenderer::Initialize(ID3D12Device* device)
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = 1;
 
-	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle(mainDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-	srvHandle.ptr = srvHandle.ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 1;
+	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle(shaderDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	srvHandle.ptr = srvHandle.ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 0;
 
 	device->CreateShaderResourceView(textureBuffer, &srvDesc, srvHandle);
-
 
     ShaderCompiler compiler;
 
@@ -499,15 +534,16 @@ void FontRenderer::RenderText(ID3D12GraphicsCommandList* commandList, std::strin
 
 	commandList->SetGraphicsRootSignature(rootSignature);
 
-	ID3D12DescriptorHeap* pDescriptorHeaps[] = {mainDescriptorHeap};
-	commandList->SetDescriptorHeaps(_countof(pDescriptorHeaps), pDescriptorHeaps);
+	commandList->SetDescriptorHeaps(1, &shaderDescriptorHeap);
 
-	D3D12_GPU_DESCRIPTOR_HANDLE cbvHandle(mainDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	commandList->SetGraphicsRootDescriptorTable(0, cbvHandle);
+	D3D12_GPU_DESCRIPTOR_HANDLE srvHandle(shaderDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	commandList->SetGraphicsRootDescriptorTable(1, srvHandle);
 
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 	//commandList->IASetIndexBuffer(&indexBufferView);
+
+	commandList->SetDescriptorHeaps(1, &charDescriptorHeap);
 
 	UINT descriptorHeapIncrementSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	for(int i = 0; i < text.size(); i++)
@@ -516,25 +552,14 @@ void FontRenderer::RenderText(ID3D12GraphicsCommandList* commandList, std::strin
 		cbvDesc.BufferLocation = constantBuffers[i]->GetGPUVirtualAddress();
 		cbvDesc.SizeInBytes = (sizeof(Character) + 255) & ~255; // CB size is required to be 256-byte aligned.
 
-		D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(mainDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-		cbvHandle.ptr = cbvHandle.ptr + (descriptorHeapIncrementSize * (2 * i + 0));
+		D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(charDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+		cbvHandle.ptr = cbvHandle.ptr + (descriptorHeapIncrementSize * (i));
 
 		Device->CreateConstantBufferView(&cbvDesc, cbvHandle);
 
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
-
-		D3D12_CPU_DESCRIPTOR_HANDLE srvHandle(mainDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-		srvHandle.ptr = srvHandle.ptr +  (descriptorHeapIncrementSize * (2 * i + 1));
-
-		Device->CreateShaderResourceView(textureBuffer, &srvDesc, srvHandle);
-
-		D3D12_GPU_DESCRIPTOR_HANDLE mainHandle(mainDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		mainHandle.ptr = mainHandle.ptr + (descriptorHeapIncrementSize * (2 * i));
-		commandList->SetGraphicsRootDescriptorTable(0, mainHandle);
+		D3D12_GPU_DESCRIPTOR_HANDLE constantBufferHandle(charDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		constantBufferHandle.ptr = constantBufferHandle.ptr + (descriptorHeapIncrementSize * (i));
+		commandList->SetGraphicsRootDescriptorTable(0, constantBufferHandle);
 
 		D3D12_RANGE CBReadRange;
 		CBReadRange.Begin = 0;

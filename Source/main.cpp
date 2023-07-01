@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
     lastTime = startTime;
 	
     char* givenShaderName;
-	LPCWSTR shaderFilePath = L"../Shaders/triangle.px.hlsl";
+	LPCWSTR shaderFilePath = L"../Shaders/example.px.hlsl";
     if (argc > 1)
     {
         givenShaderName = argv[1];
@@ -214,7 +214,7 @@ int main(int argc, char* argv[])
 
 	//init font renderer
     FontRenderer fontRenderer;
-    if(!fontRenderer.Initialize(device))
+    if(!fontRenderer.Initialize(device, {windowWidth, windowHeight}))
     {
         std::cout << "Failed to initialize font renderer!" << std::endl;
         return -1;
@@ -466,7 +466,8 @@ int main(int argc, char* argv[])
     ShaderCompiler compiler;
 
     CComPtr<ID3DBlob> vsShader, pxShader;
-    bool v = compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader);
+	const wchar_t* defaultVertexShaderPath = L"../Shaders/default.vert.hlsl";
+    bool v = compiler.CompileVertexShader(defaultVertexShaderPath, vsShader);
     bool p = compiler.CompilePixelShader(shaderFilePath, pxShader);
     if(!v || !p)
     {
@@ -580,7 +581,7 @@ int main(int argc, char* argv[])
                     vsShader = NULL;
                     pxShader = NULL;
 		            if (!compiler.CompilePixelShader(shaderFilePath, pxShader) || 
-                        !compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader))
+                        !compiler.CompileVertexShader(defaultVertexShaderPath, vsShader))
 		            {
                         break;
 		            }
@@ -644,7 +645,7 @@ int main(int argc, char* argv[])
 	        vsShader = NULL;
 	        pxShader = NULL;
 	        if (compiler.CompilePixelShader(shaderFilePath, pxShader) &&
-		        compiler.CompileVertexShader(L"../Shaders/triangle.vert.hlsl", vsShader))
+		        compiler.CompileVertexShader(defaultVertexShaderPath, vsShader))
 	        {
 				vsBytecode.BytecodeLength = vsShader->GetBufferSize();
 				vsBytecode.pShaderBytecode = vsShader->GetBufferPointer();
@@ -711,7 +712,10 @@ int main(int argc, char* argv[])
 		//commandList->IASetIndexBuffer(&indexBufferView);
         commandList->DrawInstanced(3, 1, 0, 0);
 
-        fontRenderer.RenderText(commandList, "OMG", {400,300});
+        std::ostringstream fps;
+        fps.precision(5);
+        fps << cbVS.iFrameRate;
+        fontRenderer.RenderText(commandList, "FPS : " + fps.str(), {(windowWidth * 8) / 10, (windowHeight * 19) / 20});
 
 		D3D12_RESOURCE_BARRIER presentBarrier;
 		presentBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
