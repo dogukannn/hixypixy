@@ -343,21 +343,12 @@ bool FontRenderer::Initialize(::ID3D12Device* device, glm::ivec2 windowSize)
     vertexBufferView.SizeInBytes = vertexBufferSize;
 	
 	D3D12_DESCRIPTOR_HEAP_DESC shaderDescHeapDesc = {};
-	shaderDescHeapDesc.NumDescriptors = 1;
+	shaderDescHeapDesc.NumDescriptors = 257;
 	shaderDescHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	shaderDescHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	ThrowIfFailed(device->CreateDescriptorHeap(&shaderDescHeapDesc,
 											   IID_PPV_ARGS(&shaderDescriptorHeap)));
 	shaderDescriptorHeap->SetName(L"Descriptor Heap For SRV (font bitmap atlas)");
-
-	D3D12_DESCRIPTOR_HEAP_DESC charDescHeapDesc = {};
-	charDescHeapDesc.NumDescriptors = 256;
-	charDescHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	charDescHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	ThrowIfFailed(device->CreateDescriptorHeap(&charDescHeapDesc,
-											   IID_PPV_ARGS(&charDescriptorHeap)));
-	charDescriptorHeap->SetName(L"Descriptor Heap For CBV (character properties)");
-
 
 	D3D12_HEAP_PROPERTIES cbHeapProperties;
 	cbHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -380,7 +371,7 @@ bool FontRenderer::Initialize(::ID3D12Device* device, glm::ivec2 windowSize)
 	cbResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	cbResourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-	constantBuffersSize = 128;
+	constantBuffersSize = 256;
 	constantBuffers = new ID3D12Resource*[constantBuffersSize];
 	for(int i = 0; i < constantBuffersSize; i++)
 	{
@@ -394,8 +385,8 @@ bool FontRenderer::Initialize(::ID3D12Device* device, glm::ivec2 windowSize)
 	cbvDesc.BufferLocation = constantBuffers[defaultChar]->GetGPUVirtualAddress();
 	cbvDesc.SizeInBytes = (sizeof(Character) + 255) & ~255; // CB size is required to be 256-byte aligned.
 
-	D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(charDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-	cbvHandle.ptr = cbvHandle.ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 0;
+	D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(shaderDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	cbvHandle.ptr = cbvHandle.ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * 1;
 
 	device->CreateConstantBufferView(&cbvDesc, cbvHandle);
 
@@ -543,8 +534,6 @@ void FontRenderer::RenderText(ID3D12GraphicsCommandList* commandList, std::strin
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 	//commandList->IASetIndexBuffer(&indexBufferView);
 
-	commandList->SetDescriptorHeaps(1, &charDescriptorHeap);
-
 	UINT descriptorHeapIncrementSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	for(int i = 0; i < text.size(); i++)
 	{
@@ -552,13 +541,13 @@ void FontRenderer::RenderText(ID3D12GraphicsCommandList* commandList, std::strin
 		cbvDesc.BufferLocation = constantBuffers[i]->GetGPUVirtualAddress();
 		cbvDesc.SizeInBytes = (sizeof(Character) + 255) & ~255; // CB size is required to be 256-byte aligned.
 
-		D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(charDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-		cbvHandle.ptr = cbvHandle.ptr + (descriptorHeapIncrementSize * (i));
+		D3D12_CPU_DESCRIPTOR_HANDLE cbvHandle(shaderDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+		cbvHandle.ptr = cbvHandle.ptr + (descriptorHeapIncrementSize * (i + 1));
 
 		Device->CreateConstantBufferView(&cbvDesc, cbvHandle);
 
-		D3D12_GPU_DESCRIPTOR_HANDLE constantBufferHandle(charDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		constantBufferHandle.ptr = constantBufferHandle.ptr + (descriptorHeapIncrementSize * (i));
+		D3D12_GPU_DESCRIPTOR_HANDLE constantBufferHandle(shaderDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		constantBufferHandle.ptr = constantBufferHandle.ptr + (descriptorHeapIncrementSize * (i + 1));
 		commandList->SetGraphicsRootDescriptorTable(0, constantBufferHandle);
 
 		D3D12_RANGE CBReadRange;

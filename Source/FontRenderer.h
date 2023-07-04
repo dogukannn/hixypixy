@@ -36,7 +36,6 @@ public:
 	UINT8* mappedConstantBuffer;
 
 	ID3D12DescriptorHeap* shaderDescriptorHeap;
-	ID3D12DescriptorHeap* charDescriptorHeap;
 
 	ID3D12PipelineState* pipelineState;
 
