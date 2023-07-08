@@ -565,6 +565,11 @@ int main(int argc, char* argv[])
     bool click = false;
     bool hold = false;
 
+    float deltaTimeSum = 0;
+    int deltaTimeCount = 0;
+	float fpsF = 0.0f;
+	auto start = std::chrono::system_clock::now();
+
     while (!quit)
     {
         while (SDL_PollEvent(&event))
@@ -712,9 +717,25 @@ int main(int argc, char* argv[])
 		//commandList->IASetIndexBuffer(&indexBufferView);
         commandList->DrawInstanced(3, 1, 0, 0);
 
+        deltaTimeCount++;
+        deltaTimeSum += cbVS.iTimeDelta;
+		auto nowInFrame = std::chrono::system_clock::now();
+		std::chrono::duration<float, std::ratio<1, 1000>> delta = nowInFrame - start;
+        if(delta.count() > 500)
+        {
+            auto mean = deltaTimeSum / deltaTimeCount;
+            fpsF = 1 / mean;
+            deltaTimeCount = 0;
+            deltaTimeSum = 0.0f;
+            start = nowInFrame;
+        }
+
+
         std::ostringstream fps;
         fps.precision(5);
-        fps << cbVS.iFrameRate;
+        //fps << cbVS.iFrameRate;
+        fps << fpsF;
+
         fontRenderer.RenderText(commandList, "FPS : " + fps.str(), {(windowWidth * 8) / 10, (windowHeight * 19) / 20});
 
 		D3D12_RESOURCE_BARRIER presentBarrier;
