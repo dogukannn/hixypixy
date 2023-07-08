@@ -642,8 +642,15 @@ int main(int argc, char* argv[])
             click = false;
 		}
         
-
-		auto currentPixelShaderLastWriteTime = std::filesystem::last_write_time(shaderFilePath);
+        std::filesystem::file_time_type currentPixelShaderLastWriteTime;
+        try
+        {
+            currentPixelShaderLastWriteTime = std::filesystem::last_write_time(shaderFilePath);
+        }
+        catch (std::exception e)
+        {
+	        
+        }
         if(currentPixelShaderLastWriteTime != pixelShaderLastWriteTime)
         {
             pixelShaderLastWriteTime = currentPixelShaderLastWriteTime;

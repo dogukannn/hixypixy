@@ -38,6 +38,10 @@ bool ShaderCompiler::CompileShader(LPCWSTR* args, UINT argSize, LPCWSTR shaderPa
 {
 	CComPtr<IDxcBlobEncoding> pSource = nullptr;
     Utils->LoadFile(shaderPath, nullptr, &pSource);
+    if(!pSource)
+    {
+        return false;
+    }
     DxcBuffer Source;
     Source.Ptr = pSource->GetBufferPointer();
     Source.Size = pSource->GetBufferSize();
